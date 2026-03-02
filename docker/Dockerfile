@@ -3,7 +3,10 @@
 # ===================================
 # 多阶段构建：前端打包 + 后端运行
 
+FROM python:3.11-slim-bookworm
 FROM node:20-slim AS web-builder
+RUN apt-get update && apt-get install -y bash
+CMD ["/bin/bash"]
 
 WORKDIR /app/apps/dsa-web
 
@@ -25,6 +28,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # 安装系统依赖（wkhtmltopdf 含 wkhtmltoimage，用于 Markdown 转图片 Issue #289）
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
     gcc \
     curl \
     wkhtmltopdf \
@@ -36,10 +41,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 复制依赖文件
 COPY requirements.txt .
+# 设置兼容 Atom 的编译选项，并限制并行任务数
+ENV CFLAGS="-O1 -march=atom -mtune=atom -mfpmath=sse -msse3 -mno-sse4.1 -mno-sse4.2 -mno-avx"
+ENV CXXFLAGS="$CFLAGS"
+ENV SQLALCHEMY_FORCE_PURE=1
+ENV PIP_ROOT_USER_ACTION=ignore
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+# 升级 pip 并安装基础工具和已知构建依赖
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir setuptools wheel \
+        requests websockets pycryptodome httpx requests-toolbelt
 
+# 单独安装 tenacity 和 exchange-calendars（允许 wheel）
+RUN pip install --no-cache-dir "tenacity>=8.2.0" \
+    && pip install --no-cache-dir "exchange-calendars>=4.5.0"
+
+# 先安装 numpy（pandas 的依赖），确保编译顺利
+RUN pip install --no-cache-dir --no-binary=:all: --no-build-isolation numpy
+
+# 安装剩余所有包（包括 pandas）
+RUN pip install --no-cache-dir --no-binary=:all: --no-build-isolation -r requirements.txt
 # 复制应用代码
 COPY *.py ./
 COPY api/ ./api/
