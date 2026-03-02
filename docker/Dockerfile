@@ -60,7 +60,7 @@ RUN pip install --no-cache-dir "tenacity>=8.2.0" \
 RUN pip install --no-cache-dir --no-binary=:all: --no-build-isolation numpy
 
 # 安装剩余所有包（包括 pandas）
-RUN pip install --no-cache-dir --no-binary=:all: --no-build-isolation -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 # 复制应用代码
 COPY *.py ./
 COPY api/ ./api/
